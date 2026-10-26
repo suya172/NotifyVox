@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NotifyVox 開発用 MSIX マニフェスト (SPEC §3.2 / §9)
+
+  UserNotificationListener を使うには「パッケージ ID」と
+  uap3:Capability "userNotificationListener" が必須。
+  開発時は Windows Application Packaging Project を使わず、
+  ビルド出力フォルダ (loose layout) をこのマニフェストで直接登録する:
+    scripts/register-dev.ps1
+  (開発者モードが ON であれば署名不要)
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 desktop rescap">
+
+  <Identity
+    Name="NotifyVox.Dev"
+    Publisher="CN=NotifyVoxDev"
+    Version="0.1.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>NotifyVox (Dev)</DisplayName>
+    <PublisherDisplayName>asahi</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- SPEC §3.3: Windows 10 1903 (18362) 以降 -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.18362.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="ja-jp" />
+  </Resources>
+
+  <Applications>
+    <Application Id="NotifyVox" Executable="NotifyVox.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="NotifyVox"
+        Description="Windows 通知を VOICEVOX で読み上げる常駐アプリ"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- F25/§4.6 全般: Windows 起動時自動起動 (ユーザーが設定でON/OFF。StartupTask API で制御) -->
+        <desktop:Extension Category="windows.startupTask">
+          <desktop:StartupTask TaskId="NotifyVoxStartup" Enabled="false" DisplayName="NotifyVox" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <!-- 通知アクセス (UserNotificationListener) -->
+    <uap3:Capability Name="userNotificationListener" />
+  </Capabilities>
+</Package>

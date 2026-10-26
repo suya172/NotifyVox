@@ -1,0 +1,19 @@
+<Project>
+  <!-- 全プロジェクト共通設定 -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <Authors>asahi</Authors>
+    <Product>NotifyVox</Product>
+  </PropertyGroup>
+
+  <!-- WinRT (Windows SDK projection) を使うプロジェクト共通の TFM 定義。
+       SPEC §3.3: Windows 10 1903 (18362) 以降をサポート。 -->
+  <PropertyGroup>
+    <NotifyVoxWindowsTfm>net10.0-windows10.0.19041.0</NotifyVoxWindowsTfm>
+    <NotifyVoxMinWindows>10.0.18362.0</NotifyVoxMinWindows>
+  </PropertyGroup>
+</Project>

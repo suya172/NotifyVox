@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WPF トレイ常駐アプリ本体 (SPEC §3.2, §4.6) -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>$(NotifyVoxWindowsTfm)</TargetFramework>
+    <SupportedOSPlatformVersion>$(NotifyVoxMinWindows)</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>NotifyVox.App</RootNamespace>
+    <AssemblyName>NotifyVox</AssemblyName>
+    <!-- SPEC §3.3: x64 のみ -->
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="H.NotifyIcon.Wpf" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NotifyVox.Core\NotifyVox.Core.csproj" />
+    <ProjectReference Include="..\NotifyVox.Windows\NotifyVox.Windows.csproj" />
+  </ItemGroup>
+
+  <!-- MSIX 用マニフェストをビルド出力へコピー (開発時は loose layout 登録に使用。packaging/README 参照) -->
+  <ItemGroup>
+    <None Include="..\..\packaging\AppxManifest.xml" Link="AppxManifest.xml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\packaging\Assets\**" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

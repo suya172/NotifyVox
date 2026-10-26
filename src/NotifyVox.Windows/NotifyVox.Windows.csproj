@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Windows 固有の実装。
+    - NotificationWatcher : Windows.UI.Notifications.Management.UserNotificationListener (WinRT)
+    - AudioPlayer         : NAudio
+    - Hotkey / Fullscreen 判定 : Win32 P/Invoke
+    TFM に Windows SDK バージョンを含めることで、CsWinRT 製の
+    Microsoft.Windows.SDK.NET (WinRT projection) が自動参照される。
+  -->
+  <PropertyGroup>
+    <TargetFramework>$(NotifyVoxWindowsTfm)</TargetFramework>
+    <SupportedOSPlatformVersion>$(NotifyVoxMinWindows)</SupportedOSPlatformVersion>
+    <RootNamespace>NotifyVox.Windows</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NotifyVox.Core\NotifyVox.Core.csproj" />
+  </ItemGroup>
+
+</Project>

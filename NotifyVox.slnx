@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NotifyVox.App/NotifyVox.App.csproj" />
+    <Project Path="src/NotifyVox.Core/NotifyVox.Core.csproj" />
+    <Project Path="src/NotifyVox.Windows/NotifyVox.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NotifyVox.Core.Tests/NotifyVox.Core.Tests.csproj" />
+  </Folder>
+</Solution>
