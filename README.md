@@ -51,11 +51,28 @@ Windows 上で指定したアプリケーションの通知（トースト通知
 
 ---
 
-## 必要要件
+## インストール方法 (一般利用者向け)
+
+### 動作環境
+1. **OS**: Windows 11 または Windows 10 Version 1903 以降 (x64)
+2. **VOICEVOX**: [VOICEVOX エディタ または VOICEVOX エンジン](https://voicevox.hiroshiba.jp/) 0.26.0 以降（デフォルトポート `50021` で起動）
+   - ※ .NET ランタイムはパッケージ内に同梱されているため、別途インストールは不要です。
+
+### 導入手順
+1. [GitHub Releases](https://github.com/suya172/NotifyVox/releases) から最新の `NotifyVox-v*-win-x64.zip` をダウンロードし、**すべて展開（解凍）** します。
+2. 展開したフォルダ内の **`Install.cmd`** をダブルクリックして実行します。
+   - 初回のみ、自己署名証明書（`NotifyVox.cer`）を Windows の「信頼されたユーザー (`TrustedPeople`)」へ登録するため、管理者権限の確認画面（UAC）が表示されます。
+   - 2回目以降のバージョンアップ時は証明書の再登録なしでそのまま上書き更新され、設定も引き継がれます。
+3. 初回起動時、設定画面上部に案内バナーが表示された場合は「Windows 設定を開く」ボタンから NotifyVox の **通知へのアクセス** を ON にしてください。
+4. アンインストールする際は、展開フォルダ内の **`Uninstall.cmd`** を実行すると、アプリ本体と自己署名証明書の両方を綺麗に削除できます。
+
+---
+
+## 開発環境の必要要件 (ソースからビルドする場合)
 
 1. **OS**: Windows 11（必須）または Windows 10 Version 1903 以降 (x64)
-2. **.NET SDK**: **.NET 10 LTS** (SDK 10.0.403 以降)
-3. **Windows 開発者モード**: `UserNotificationListener` を使うため、開発時は **開発者モード** を有効にしてください（「Windows 設定」>「システム」>「開発者向け」>「開発者モード」を ON）。
+2. **.NET SDK**: **.NET 10 LTS** (SDK 10.0.403 以降) + Windows 10/11 SDK (`makeappx.exe` / `signtool.exe`)
+3. **Windows 開発者モード**: `UserNotificationListener` を署名なし loose layout でデバッグ実行するため、開発時は **開発者モード** を有効にしてください（「Windows 設定」>「システム」>「開発者向け」>「開発者モード」を ON）。
 4. **VOICEVOX**: VOICEVOX エディタ または VOICEVOX エンジン 0.26.0 以降（デフォルトポート `50021` で起動）。
 
 ---
@@ -65,9 +82,10 @@ Windows 上で指定したアプリケーションの通知（トースト通知
 ```
 NotifyVox/
 ├── NotifyVox.slnx                    # ソリューション定義
-├── Directory.Build.props              # 共通ビルド設定 (C# latest, Nullable, etc.)
+├── Directory.Build.props              # 共通ビルド・メタデータ設定 (suya172, Version, Nullable, etc.)
 ├── Directory.Packages.props           # NuGet パッケージ一元管理 (Central Package Management)
 ├── global.json                        # .NET 10 SDK 固定 & Microsoft.Testing.Platform 有効化
+├── .github/workflows/release.yml      # GitHub Releases 自動パッケージ・公開ワークフロー
 │
 ├── src/
 │   ├── NotifyVox.Core/               # 【純粋ロジック層】(net10.0)
@@ -82,12 +100,16 @@ NotifyVox/
 ├── tests/
 │   └── NotifyVox.Core.Tests/         # 【単体テスト】(xUnit v3 + MTP + NSubstitute)
 │
-├── packaging/                        # 【MSIX パッケージ定義】
-│   ├── AppxManifest.xml              # userNotificationListener 権限・StartupTask 宣言
+├── packaging/                        # 【MSIX パッケージ・インストーラ定義】
+│   ├── AppxManifest.xml              # 開発用マニフェスト (NotifyVox.Dev / loose layout 用)
+│   ├── AppxManifest.Release.xml      # 本番配布用マニフェスト (suya172.NotifyVox)
+│   ├── installer/                    # 配布 ZIP 同梱の Install.cmd / Uninstall.cmd / README.txt
 │   └── Assets/                       # ロゴ・アプリアイコン
 │
 ├── scripts/
 │   ├── register-dev.ps1              # 開発用 loose-layout 登録・起動スクリプト
+│   ├── new-signing-cert.ps1          # 配布 MSIX 署名用の自己署名証明書 (.pfx) 生成スクリプト
+│   ├── package-msix.ps1              # Self-Contained 発行・MSIX 署名・配布 ZIP 作成スクリプト
 │   └── send-test-toast.ps1           # 結合テスト用トースト通知発行スクリプト
 │
 └── docs/
@@ -131,6 +153,36 @@ powershell.exe -NoProfile -File scripts/send-test-toast.ps1 -Title "NotifyVox �
 
 ---
 
+## 配布パッケージの作成・リリース手順 (メンテナ向け)
+
+### 1. 署名用証明書（`CN=suya172`）の初回作成
+継続的なバージョンアップでユーザーが証明書を再登録しなくて済むよう、初回に `.certs/` 配下（`.gitignore` 対象）へ固定の自己署名証明書を生成します。
+
+```powershell
+pwsh scripts/new-signing-cert.ps1
+```
+
+出力された案内に従い、GitHub リポジトリの **Settings > Secrets and variables > Actions** に以下2つの Repository Secrets を登録します。
+- `MSIX_SIGNING_CERT_BASE64`: `.certs/NotifyVoxSigning.pfx.base64.txt` の中身
+- `MSIX_SIGNING_CERT_PASSWORD`: コンソールに表示されたパスワード
+
+### 2. ローカルでの配布 ZIP 作成
+`.certs/NotifyVoxSigning.pfx` を使って（未作成時は一時証明書を自動生成して）、`artifacts/release/` に自己署名 MSIX・`Install.cmd`・`Uninstall.cmd` 入り ZIP を出力します。
+
+```powershell
+pwsh scripts/package-msix.ps1 -PfxPassword "<証明書のパスワード>"
+```
+
+### 3. GitHub Releases への自動公開
+バージョンタグ（`v*`）を push すると、GitHub Actions（`.github/workflows/release.yml`）が単体テスト・Self-Contained ビルド・MSIX 署名を実行し、リリースノート付きの GitHub Release を自動公開します。
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+---
+
 ## 採用技術・主要ライブラリ
 
 | 領域 | 技術 / ライブラリ | バージョン | 特記事項 |
@@ -155,5 +207,5 @@ powershell.exe -NoProfile -File scripts/send-test-toast.ps1 -Title "NotifyVox �
 
 ## ライセンス
 
-本プロジェクトは個人利用・オープンソースとして開発されています。
+本プロジェクトは [MIT License](LICENSE)（Copyright (c) 2026 suya172）のもとで公開されています。
 各サードパーティライブラリおよび VOICEVOX の利用規約についてはそれぞれの公式ドキュメントを参照してください。

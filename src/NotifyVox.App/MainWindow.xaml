@@ -7,544 +7,1051 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="NotifyVox 設定"
-        Width="860"
-        Height="680"
-        MinWidth="720"
-        MinHeight="540"
+        Width="980"
+        Height="700"
+        MinWidth="840"
+        MinHeight="560"
+        WindowStyle="None"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI"
+        FontFamily="{StaticResource UiFont}"
         FontSize="13"
-        Background="#F8FAFC">
+        Background="{StaticResource WindowBackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}">
+
+    <!--
+        WindowChrome によるカスタムタイトルバー (SPEC §4.6, 要件2)
+        - OS デフォルトのタイトルバーを非表示にし、コンテンツ領域を最上部まで拡張
+        - CaptionHeight="48" で上部 48px をドラッグ移動領域として認識
+        - ResizeBorderThickness="6" で Aero Snap やウィンドウリサイズを維持
+    -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="48"
+                      ResizeBorderThickness="6"
+                      CornerRadius="0"
+                      GlassFrameThickness="0"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <Style x:Key="CardBorder" TargetType="Border">
-            <Setter Property="Background" Value="White" />
-            <Setter Property="BorderBrush" Value="#E2E8F0" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="14" />
-            <Setter Property="Margin" Value="0,0,0,12" />
-        </Style>
-
-        <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#0F172A" />
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
-
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="12,5" />
+        <!-- VOICEVOX 接続状態インジケータ丸 -->
+        <Style x:Key="EngineStatusDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
             <Setter Property="Margin" Value="0,0,6,0" />
-            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Fill" Value="{StaticResource DangerBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEngineConnected}" Value="True">
+                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="14">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <!-- ウィンドウ外枠ボーダー (最大化時はコードビハインドで Padding/Border を調整) -->
+    <Border x:Name="WindowBorder"
+            BorderBrush="{StaticResource WindowFrameBrush}"
+            BorderThickness="1"
+            Background="{StaticResource WindowBackgroundBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="48" />  <!-- カスタムタイトルバー -->
+                <RowDefinition Height="*" />   <!-- 2ペインメインコンテンツ -->
+            </Grid.RowDefinitions>
 
-        <!-- ヘッダステータスバー -->
-        <Border Grid.Row="0" Background="#0F172A" CornerRadius="6" Padding="14,10" Margin="0,0,0,10">
-            <DockPanel LastChildFill="True">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox Content="今すぐミュート (_M)"
-                              IsChecked="{Binding IsManuallyMuted}"
-                              Foreground="White"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0" />
-                    <Button Content="テスト発話 (_T)" Command="{Binding TestSpeechCommand}" />
-                    <Button Content="停止 (_S)" Command="{Binding StopSpeechCommand}" Margin="0" />
-                </StackPanel>
+            <!-- =========================================================
+                 1. カスタムタイトルバー (Row 0, SPEC §4.6)
+                 ========================================================= -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <!-- 左: アプリアイコン・タイトル・エンジン状態バッジ -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- 中央: ドラッグ領域 (余白) -->
+                        <ColumnDefinition Width="*" />
+                        <!-- 右: アクション (ミュート・テスト・キャプションボタン) -->
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <StackPanel>
-                    <TextBlock Text="NotifyVox — Windows 通知リアルタイム読み上げ"
-                               Foreground="White"
-                               FontWeight="Bold"
-                               FontSize="15" />
-                    <TextBlock Text="{Binding EngineStatusText}"
-                               Foreground="#CBD5E1"
-                               FontSize="12"
-                               Margin="0,2,0,0" />
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <!-- 4タブ構成 (SPEC §4.6) -->
-        <TabControl Grid.Row="1" Background="Transparent" BorderBrush="#CBD5E1">
-
-            <!-- ==========================================
-                 タブ 1: アプリ一覧 (SPEC §4.6-1)
-                 ========================================== -->
-            <TabItem Header="1. アプリ一覧 (_1)">
-                <DockPanel Margin="10">
-                    <!-- 通知アクセス未許可時の誘導バナー (SPEC F1) -->
-                    <Border DockPanel.Dock="Top"
-                            Visibility="{Binding IsNotificationAccessWarningVisible, Converter={StaticResource BoolToVis}}"
-                            Background="#FEF2F2"
-                            BorderBrush="#FCA5A5"
-                            BorderThickness="1"
-                            CornerRadius="6"
-                            Padding="12"
-                            Margin="0,0,0,10">
-                        <StackPanel>
-                            <TextBlock Text="通知アクセスの確認が必要です"
-                                       FontWeight="Bold"
-                                       Foreground="#991B1B" />
-                            <TextBlock Text="{Binding NotificationAccessMessage}"
-                                       Foreground="#7F1D1D"
-                                       TextWrapping="Wrap"
-                                       Margin="0,4,0,8" />
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="Windows の通知アクセス設定を開く (_W)"
-                                        Command="{Binding OpenWindowsNotificationSettingsCommand}" />
-                                <Button Content="状態を再チェック (_R)"
-                                        Command="{Binding RecheckNotificationAccessCommand}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 上部説明＆一括操作 -->
-                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="すべて ON" Command="{Binding EnableAllAppsCommand}" />
-                            <Button Content="すべて OFF" Command="{Binding DisableAllAppsCommand}" Margin="0" />
-                        </StackPanel>
-                        <TextBlock VerticalAlignment="Center" Foreground="#475569" TextWrapping="Wrap"
-                                   Text="通知を受け取ったアプリが自動的に候補表示されます。読み上げたいアプリを ON にしてください（変更は即時保存されます）。" />
-                    </DockPanel>
-
-                    <!-- 手動追加フッタ -->
-                    <Border DockPanel.Dock="Bottom" Style="{StaticResource CardBorder}" Margin="0,10,0,0" Padding="10">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="2*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="1.4*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Label Grid.Column="0" Content="AppId:" Target="{Binding ElementName=ManualAppIdBox}" VerticalAlignment="Center" />
-                            <TextBox x:Name="ManualAppIdBox" Grid.Column="1"
-                                     Text="{Binding NewAppId, UpdateSourceTrigger=PropertyChanged}"
-                                     VerticalContentAlignment="Center" Margin="4,0,10,0"
-                                     ToolTip="AUMID またはアプリの識別子" />
-                            <Label Grid.Column="2" Content="表示名:" Target="{Binding ElementName=ManualAppNameBox}" VerticalAlignment="Center" />
-                            <TextBox x:Name="ManualAppNameBox" Grid.Column="3"
-                                     Text="{Binding NewAppName, UpdateSourceTrigger=PropertyChanged}"
-                                     VerticalContentAlignment="Center" Margin="4,0,10,0" />
-                            <Button Grid.Column="4" Content="手動追加 (_A)" Command="{Binding AddManualAppCommand}" Margin="0" />
-                        </Grid>
-                    </Border>
-
-                    <!-- アプリカードリスト -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding AppRules}"
-                                      KeyboardNavigation.TabNavigation="Continue">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:AppRuleItemViewModel}">
-                                    <Border Style="{StaticResource CardBorder}" Padding="12,10" Margin="0,0,0,8">
-                                        <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="240" />
-                                                    <ColumnDefinition Width="120" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-
-                                                <CheckBox Grid.Column="0"
-                                                          IsChecked="{Binding Enabled}"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,10,0"
-                                                          ToolTip="このアプリの通知を読み上げる" />
-
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
-                                                    <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" Foreground="#0F172A" />
-                                                    <TextBlock Text="{Binding AppId}" FontSize="11" Foreground="#64748B" TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-
-                                                <ComboBox Grid.Column="2"
-                                                          ItemsSource="{Binding DataContext.PerAppSpeakerOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          SelectedValue="{Binding StyleId}"
-                                                          SelectedValuePath="StyleId"
-                                                          DisplayMemberPath="DisplayName"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,8,0"
-                                                          ToolTip="アプリ別話者スタイル" />
-
-                                                <ComboBox Grid.Column="3"
-                                                          ItemsSource="{Binding DataContext.PriorityOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          SelectedValue="{Binding Priority}"
-                                                          SelectedValuePath="Value"
-                                                          DisplayMemberPath="DisplayName"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,8,0"
-                                                          ToolTip="読み上げ優先度" />
-
-                                                <Button Grid.Column="4"
-                                                        Content="削除"
-                                                        Command="{Binding RemoveCommand}"
-                                                        Margin="0" />
-                                            </Grid>
-
-                                            <!-- アプリ別の詳細設定（テンプレート上書き・個別ミュートワード） -->
-                                            <Expander Header="詳細設定（個別テンプレート・個別ミュートワード）"
-                                                      Margin="24,6,0,0"
-                                                      FontSize="12"
-                                                      Foreground="#475569">
-                                                <Grid Margin="0,6,0,0">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="150" />
-                                                        <ColumnDefinition Width="*" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                    </Grid.RowDefinitions>
-
-                                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="個別テンプレート (空欄で既定):" VerticalAlignment="Center" Margin="0,0,8,6" />
-                                                    <TextBox Grid.Row="0" Grid.Column="1"
-                                                             Text="{Binding TemplateOverride, UpdateSourceTrigger=PropertyChanged}"
-                                                             Margin="0,0,0,6" />
-
-                                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="個別ミュート語 (カンマ区切り):" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                                    <TextBox Grid.Row="1" Grid.Column="1"
-                                                             Text="{Binding MuteKeywordsCsv, UpdateSourceTrigger=PropertyChanged}" />
-                                                </Grid>
-                                            </Expander>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
-            </TabItem>
-
-            <!-- ==========================================
-                 タブ 2: 読み上げ (SPEC §4.6-2)
-                 ========================================== -->
-            <TabItem Header="2. 読み上げ (_2)">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel>
-                        <Border Style="{StaticResource CardBorder}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="話者・音声パラメータ" />
-
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="既定の話者スタイル (_V):" Target="{Binding ElementName=DefaultSpeakerCombo}" />
-                                    <ComboBox x:Name="DefaultSpeakerCombo"
-                                              Grid.Column="1"
-                                              ItemsSource="{Binding DefaultSpeakerOptions}"
-                                              SelectedValue="{Binding DefaultStyleId}"
-                                              SelectedValuePath="StyleId"
-                                              DisplayMemberPath="DisplayName"
-                                              Margin="0,0,8,0" />
-                                    <Button Grid.Column="2" Content="話者再取得" Command="{Binding RefreshVoicevoxCommand}" Margin="0" />
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="64" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="話速 (Speed):" Target="{Binding ElementName=SpeedSlider}" />
-                                    <Slider x:Name="SpeedSlider" Grid.Column="1" Minimum="0.50" Maximum="2.00" TickFrequency="0.05" IsSnapToTickEnabled="True"
-                                            Value="{Binding SpeedScale}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding SpeedScale, StringFormat={}{0:F2}x}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="64" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="音高 (Pitch):" Target="{Binding ElementName=PitchSlider}" />
-                                    <Slider x:Name="PitchSlider" Grid.Column="1" Minimum="-0.15" Maximum="0.15" TickFrequency="0.01" IsSnapToTickEnabled="True"
-                                            Value="{Binding PitchScale}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding PitchScale, StringFormat={}{0:+0.00;-0.00;0.00}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                </Grid>
-
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="64" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="抑揚 (Intonation):" Target="{Binding ElementName=IntonationSlider}" />
-                                    <Slider x:Name="IntonationSlider" Grid.Column="1" Minimum="0.00" Maximum="2.00" TickFrequency="0.05" IsSnapToTickEnabled="True"
-                                            Value="{Binding IntonationScale}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding IntonationScale, StringFormat={}{0:F2}}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                </Grid>
-
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="64" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="再生音量 (Volume):" Target="{Binding ElementName=VolumeSlider}" />
-                                    <Slider x:Name="VolumeSlider" Grid.Column="1" Minimum="0" Maximum="150" TickFrequency="5" IsSnapToTickEnabled="True"
-                                            Value="{Binding VolumePercent}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding VolumePercent, StringFormat={}{0:F0}%}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                </Grid>
-
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="出力デバイス (_D):" Target="{Binding ElementName=DeviceCombo}" />
-                                    <ComboBox x:Name="DeviceCombo"
-                                              Grid.Column="1"
-                                              ItemsSource="{Binding OutputDevices}"
-                                              SelectedValue="{Binding SelectedOutputDeviceId}"
-                                              SelectedValuePath="Id"
-                                              DisplayMemberPath="Name"
-                                              Margin="0,0,8,0" />
-                                    <Button Grid.Column="2" Content="更新" Command="{Binding RefreshOutputDevicesCommand}" Margin="0" />
-                                </Grid>
-                            </StackPanel>
+                    <!-- 左側ブランド表示 -->
+                    <StackPanel Grid.Column="0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="16,0,0,0">
+                        <!-- アプリアイコンバッジ -->
+                        <Border Width="28" Height="28"
+                                CornerRadius="6"
+                                Background="{StaticResource AccentBrush}"
+                                Margin="0,0,10,0">
+                            <TextBlock Text="&#xE7F4;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="15"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
                         </Border>
 
-                        <Border Style="{StaticResource CardBorder}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="読み上げテンプレートとテキスト整形" />
+                        <TextBlock Text="NotifyVox"
+                                   FontWeight="Bold"
+                                   FontSize="14"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0" />
 
-                                <Label Content="既定テンプレート ({app}, {title}, {body}, {time}):" Target="{Binding ElementName=TemplateBox}" Padding="0,0,0,4" />
-                                <TextBox x:Name="TemplateBox"
-                                         Text="{Binding ReadingTemplate, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4"
-                                         Margin="0,0,0,10" />
-
-                                <WrapPanel Margin="0,0,0,8" VerticalAlignment="Center">
-                                    <Label Content="1通知あたりの最大文字数:" Target="{Binding ElementName=MaxCharsBox}" VerticalAlignment="Center" />
-                                    <TextBox x:Name="MaxCharsBox"
-                                             Width="72"
-                                             Text="{Binding MaxCharsPerNotification, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center"
-                                             Margin="4,0,16,0" />
-                                    <CheckBox Content="超過時に「以下省略」を付ける"
-                                              IsChecked="{Binding AppendOmittedSuffix}"
-                                              VerticalAlignment="Center" />
-                                </WrapPanel>
-
-                                <CheckBox Content="本文中の URL を「URL」と読み替える（連続絵文字は自動除去）"
-                                          IsChecked="{Binding SpeakUrlAsWord}" />
+                        <!-- VOICEVOX エンジン接続ステータスバッジ (Pill) -->
+                        <Border Style="{StaticResource PillBorder}"
+                                Background="{StaticResource SurfaceHoverBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1"
+                                ToolTip="{Binding EngineStatusText}"
+                                WindowChrome.IsHitTestVisibleInChrome="True">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Style="{StaticResource EngineStatusDot}" />
+                                <TextBlock Text="{Binding EngineStatusText}"
+                                           FontSize="11.5"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           MaxWidth="260"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
 
-            <!-- ==========================================
-                 タブ 3: ミュート (SPEC §4.6-3)
-                 ========================================== -->
-            <TabItem Header="3. ミュート (_3)">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-                    <StackPanel>
-                        <Border Style="{StaticResource CardBorder}">
+                    <!-- 右側操作コントロール群 (HitTestVisibleInChrome="True でクリックを有効化) -->
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                WindowChrome.IsHitTestVisibleInChrome="True">
+                        <!-- 今すぐミュート トグルスイッチ -->
+                        <ToggleButton Style="{StaticResource TitleBarMuteToggle}"
+                                      IsChecked="{Binding IsManuallyMuted}"
+                                      Height="32"
+                                      Margin="0,0,8,0"
+                                      ToolTip="一時的にすべての通知読み上げを停止 (ショートカットで切替可)" />
+
+                        <!-- テスト発話ボタン -->
+                        <Button Content="テスト発話 (_T)"
+                                Style="{StaticResource SubtleButton}"
+                                Command="{Binding TestSpeechCommand}"
+                                Height="32"
+                                Padding="10,0"
+                                Margin="0,0,4,0"
+                                ToolTip="VOICEVOX への接続テストとサンプル音声の再生" />
+
+                        <!-- 停止ボタン -->
+                        <Button Content="停止 (_S)"
+                                Style="{StaticResource SubtleButton}"
+                                Command="{Binding StopSpeechCommand}"
+                                Height="32"
+                                Padding="8,0"
+                                Margin="0,0,8,0"
+                                ToolTip="現在の読み上げキューと音声を即時停止" />
+
+                        <!-- 縦区切り線 -->
+                        <Border Width="1" Height="20"
+                                Background="{StaticResource BorderStrongBrush}"
+                                Margin="4,0,8,0"
+                                VerticalAlignment="Center" />
+
+                        <!-- ウィンドウキャプション操作 (最小化・最大化・閉じる) -->
+                        <Button Style="{StaticResource CaptionButton}"
+                                Content="&#xE921;"
+                                Click="MinimizeButton_Click"
+                                ToolTip="最小化" />
+
+                        <Button x:Name="MaximizeButton"
+                                Style="{StaticResource CaptionButton}"
+                                Content="&#xE922;"
+                                Click="MaximizeButton_Click"
+                                ToolTip="最大化" />
+
+                        <Button Style="{StaticResource CaptionCloseButton}"
+                                Content="&#xE8BB;"
+                                Click="CloseButton_Click"
+                                ToolTip="閉じる (タスクトレイに常駐)" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- =========================================================
+                 2. 2ペインメインコンテンツ (Row 1)
+                 左ペイン: サイドナビゲーション (NavigationTabControl)
+                 右ペイン: 設定カード領域
+                 ========================================================= -->
+            <TabControl Grid.Row="1"
+                        Style="{StaticResource NavigationTabControl}"
+                        Margin="0,8,0,0">
+
+                <!-- =====================================================
+                     タブ 1: アプリ一覧 (SPEC §4.6-1)
+                     ===================================================== -->
+                <TabItem Header="アプリ一覧 (_1)"
+                         Style="{StaticResource NavigationTabItem}"
+                         Tag="&#xE71D;">
+                    <Grid Margin="12,4,24,16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" /> <!-- ページヘッダー -->
+                            <RowDefinition Height="Auto" /> <!-- 通知アクセス警告バナー -->
+                            <RowDefinition Height="*" />    <!-- アプリリスト (スクロール) -->
+                            <RowDefinition Height="Auto" /> <!-- 手動追加カード -->
+                        </Grid.RowDefinitions>
+
+                        <!-- ページヘッダー: タイトル + 説明 + 一括操作ボタン -->
+                        <DockPanel Grid.Row="0" Margin="0,0,0,16">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="すべて ON (_O)"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Command="{Binding EnableAllAppsCommand}"
+                                        Margin="0,0,8,0" />
+                                <Button Content="すべて OFF (_F)"
+                                        Command="{Binding DisableAllAppsCommand}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource PageTitleText}" Text="アプリ別読み上げ設定" />
+                                <TextBlock Style="{StaticResource PageSubtitleText}"
+                                           Text="通知を受け取ったアプリが自動的に候補表示されます。読み上げたいアプリを ON にしてください（変更は即時保存されます）。" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <!-- 通知アクセス未許可時の誘導バナー (SPEC F1) -->
+                        <Border Grid.Row="1"
+                                Visibility="{Binding IsNotificationAccessWarningVisible, Converter={StaticResource BoolToVis}}"
+                                Background="{StaticResource DangerSubtleBrush}"
+                                BorderBrush="{StaticResource DangerBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource CardCornerRadius}"
+                                Padding="16,14"
+                                Margin="0,0,0,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Style="{StaticResource IconText}"
+                                           Text="&#xE7BA;"
+                                           FontSize="22"
+                                           Foreground="{StaticResource DangerBrush}"
+                                           Margin="0,0,12,0"
+                                           VerticalAlignment="Top" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Windows の通知アクセス権限が必要です"
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               Foreground="{StaticResource DangerBrush}" />
+                                    <TextBlock Text="{Binding NotificationAccessMessage}"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,4,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <Button Content="Windows 設定を開く (_W)"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Command="{Binding OpenWindowsNotificationSettingsCommand}"
+                                            Margin="0,0,8,0" />
+                                    <Button Content="再チェック (_R)"
+                                            Command="{Binding RecheckNotificationAccessCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- アプリカード一覧 -->
+                        <ScrollViewer Grid.Row="2"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Padding="0,0,6,0">
+                            <ItemsControl ItemsSource="{Binding AppRules}"
+                                          KeyboardNavigation.TabNavigation="Continue">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:AppRuleItemViewModel}">
+                                        <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <!-- カード上段: トグル / 名前・ID / 話者 / 優先度 / 削除 -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="220" />
+                                                        <ColumnDefinition Width="120" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- 有効/無効トグルスイッチ -->
+                                                    <CheckBox Grid.Column="0"
+                                                              Style="{StaticResource ToggleSwitch}"
+                                                              Tag="Compact"
+                                                              IsChecked="{Binding Enabled}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,12,0"
+                                                              ToolTip="このアプリの通知を読み上げる" />
+
+                                                    <!-- アプリ名と AppId -->
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                                        <TextBlock Text="{Binding AppName}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="14"
+                                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                                        <TextBlock Text="{Binding AppId}"
+                                                                   Style="{StaticResource MonoCaptionText}"
+                                                                   Margin="0,2,0,0" />
+                                                    </StackPanel>
+
+                                                    <!-- 話者選択コンボボックス -->
+                                                    <ComboBox Grid.Column="2"
+                                                              ItemsSource="{Binding DataContext.PerAppSpeakerOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              SelectedValue="{Binding StyleId}"
+                                                              SelectedValuePath="StyleId"
+                                                              DisplayMemberPath="DisplayName"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,8,0"
+                                                              ToolTip="アプリ別の個別話者スタイル (未選択で既定スタイル)" />
+
+                                                    <!-- 優先度コンボボックス -->
+                                                    <ComboBox Grid.Column="3"
+                                                              ItemsSource="{Binding DataContext.PriorityOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              SelectedValue="{Binding Priority}"
+                                                              SelectedValuePath="Value"
+                                                              DisplayMemberPath="DisplayName"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,8,0"
+                                                              ToolTip="読み上げ優先度 (通常 / 高:割込み)" />
+
+                                                    <!-- 削除ボタン -->
+                                                    <Button Grid.Column="4"
+                                                            Style="{StaticResource DangerSubtleButton}"
+                                                            Content="削除"
+                                                            Command="{Binding RemoveCommand}"
+                                                            ToolTip="このアプリのルールを削除" />
+                                                </Grid>
+
+                                                <!-- カード下段: 個別テンプレート・個別ミュート語の折りたたみ詳細 -->
+                                                <Expander Header="個別テンプレート・ミュート語の設定"
+                                                          Margin="44,8,0,0"
+                                                          FontSize="12"
+                                                          Foreground="{StaticResource TextSecondaryBrush}">
+                                                    <Grid Margin="0,8,0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="170" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+
+                                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                                                   Text="個別テンプレート (空欄で既定):"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   Margin="0,0,8,8" />
+                                                        <TextBox Grid.Row="0" Grid.Column="1"
+                                                                 Text="{Binding TemplateOverride, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Margin="0,0,0,8" />
+
+                                                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                                                   Text="個別ミュート語 (カンマ区切り):"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                                   Margin="0,0,8,0" />
+                                                        <TextBox Grid.Row="1" Grid.Column="1"
+                                                                 Text="{Binding MuteKeywordsCsv, UpdateSourceTrigger=PropertyChanged}" />
+                                                    </Grid>
+                                                </Expander>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <!-- 手動追加カード (下部固定) -->
+                        <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="16,14">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="手動ミュートとグローバルホットキー" />
+                                <TextBlock Style="{StaticResource SectionTitleText}" Text="アプリの手動追加" Margin="0,0,0,2" />
+                                <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                           Text="まだ通知を受信していないアプリの AUMID やプロセス識別子を事前に追加できます。"
+                                           Margin="0,0,0,10" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="1.5*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <CheckBox Content="手動ミュートを有効にする（有効時はすべての通知読み上げを一時停止）"
-                                          IsChecked="{Binding IsManuallyMuted}"
-                                          Margin="0,0,0,10" />
+                                    <Label Grid.Column="0"
+                                           Content="AppId:"
+                                           Target="{Binding ElementName=ManualAppIdBox}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,0,6,0" />
+                                    <TextBox x:Name="ManualAppIdBox"
+                                             Grid.Column="1"
+                                             Style="{StaticResource MonoTextBox}"
+                                             Text="{Binding NewAppId, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,0,12,0"
+                                             ToolTip="AUMID またはアプリ識別子" />
 
+                                    <Label Grid.Column="2"
+                                           Content="表示名:"
+                                           Target="{Binding ElementName=ManualAppNameBox}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,0,6,0" />
+                                    <TextBox x:Name="ManualAppNameBox"
+                                             Grid.Column="3"
+                                             Text="{Binding NewAppName, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,0,12,0"
+                                             ToolTip="画面上に表示するアプリの名称" />
+
+                                    <Button Grid.Column="4"
+                                            Content="手動追加 (_A)"
+                                            Command="{Binding AddManualAppCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </TabItem>
+
+                <!-- =====================================================
+                     タブ 2: 読み上げ (SPEC §4.6-2)
+                     ===================================================== -->
+                <TabItem Header="読み上げ (_2)"
+                         Style="{StaticResource NavigationTabItem}"
+                         Tag="&#xE768;">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,4,24,16">
+                        <StackPanel>
+                            <!-- ページヘッダー -->
+                            <StackPanel Margin="0,0,0,16">
+                                <TextBlock Style="{StaticResource PageTitleText}" Text="読み上げ・音声パラメータ" />
+                                <TextBlock Style="{StaticResource PageSubtitleText}"
+                                           Text="VOICEVOX の話者選択、話速・音高・抑揚・音量の調整、および読み上げテンプレートを設定します。" />
+                            </StackPanel>
+
+                            <!-- カード 1: 話者・音声パラメータ -->
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleText}" Text="話者・音声パラメータ" />
+                                    <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                               Text="VOICEVOX エンジンで合成する音声の基本設定です。各パラメータはスライダーで微調整できます。"
+                                               Margin="0,2,0,14" />
+
+                                    <!-- 既定話者スタイル -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="既定の話者スタイル (_V):"
+                                                   Target="{Binding ElementName=DefaultSpeakerCombo}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="アプリ別設定で話者が指定されていないすべての通知に適用されます。" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ComboBox x:Name="DefaultSpeakerCombo"
+                                                      ItemsSource="{Binding DefaultSpeakerOptions}"
+                                                      SelectedValue="{Binding DefaultStyleId}"
+                                                      SelectedValuePath="StyleId"
+                                                      DisplayMemberPath="DisplayName"
+                                                      Width="240"
+                                                      Margin="0,0,8,0" />
+                                            <Button Content="話者再取得"
+                                                    Command="{Binding RefreshVoicevoxCommand}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- 話速 (Speed) -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="240" />
+                                            <ColumnDefinition Width="64" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="話速 (Speed Scale):"
+                                                   Target="{Binding ElementName=SpeedSlider}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="読み上げ速度を調整します (0.50x 〜 2.00x, 既定: 1.05x)。" />
+                                        </StackPanel>
+                                        <Slider x:Name="SpeedSlider"
+                                                Grid.Column="1"
+                                                Minimum="0.50"
+                                                Maximum="2.00"
+                                                TickFrequency="0.05"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding SpeedScale}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Style="{StaticResource MonoCaptionText}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding SpeedScale, StringFormat={}{0:F2}x}"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- 音高 (Pitch) -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="240" />
+                                            <ColumnDefinition Width="64" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="音高 (Pitch Scale):"
+                                                   Target="{Binding ElementName=PitchSlider}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="声の高さを調整します (-0.15 〜 +0.15, 既定: 0.00)。" />
+                                        </StackPanel>
+                                        <Slider x:Name="PitchSlider"
+                                                Grid.Column="1"
+                                                Minimum="-0.15"
+                                                Maximum="0.15"
+                                                TickFrequency="0.01"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding PitchScale}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Style="{StaticResource MonoCaptionText}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding PitchScale, StringFormat={}{0:+0.00;-0.00;0.00}}"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- 抑揚 (Intonation) -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="240" />
+                                            <ColumnDefinition Width="64" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="抑揚 (Intonation Scale):"
+                                                   Target="{Binding ElementName=IntonationSlider}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="声の抑揚・抑揚の強弱を調整します (0.00 〜 2.00, 既定: 1.00)。" />
+                                        </StackPanel>
+                                        <Slider x:Name="IntonationSlider"
+                                                Grid.Column="1"
+                                                Minimum="0.00"
+                                                Maximum="2.00"
+                                                TickFrequency="0.05"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding IntonationScale}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Style="{StaticResource MonoCaptionText}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding IntonationScale, StringFormat={}{0:F2}}"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- 再生音量 (Volume) -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="240" />
+                                            <ColumnDefinition Width="64" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="再生音量 (Volume Percent):"
+                                                   Target="{Binding ElementName=VolumeSlider}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="合成音声の再生音量を調整します (0% 〜 150%, 既定: 80%)。" />
+                                        </StackPanel>
+                                        <Slider x:Name="VolumeSlider"
+                                                Grid.Column="1"
+                                                Minimum="0"
+                                                Maximum="150"
+                                                TickFrequency="5"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding VolumePercent}" />
+                                        <TextBlock Grid.Column="2"
+                                                   Style="{StaticResource MonoCaptionText}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding VolumePercent, StringFormat={}{0:F0}%}"
+                                                   HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- 出力オーディオデバイス -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="出力オーディオデバイス (_D):"
+                                                   Target="{Binding ElementName=DeviceCombo}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="通知音声を再生する Windows オーディオエンドポイントを選択します。" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ComboBox x:Name="DeviceCombo"
+                                                      ItemsSource="{Binding OutputDevices}"
+                                                      SelectedValue="{Binding SelectedOutputDeviceId}"
+                                                      SelectedValuePath="Id"
+                                                      DisplayMemberPath="Name"
+                                                      Width="240"
+                                                      Margin="0,0,8,0" />
+                                            <Button Content="デバイス更新"
+                                                    Command="{Binding RefreshOutputDevicesCommand}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- カード 2: 読み上げテンプレートとテキスト整形 -->
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleText}" Text="読み上げテンプレートとテキスト整形" />
+                                    <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                               Text="通知を受信した際にどのような文章フォーマットで発話するかをカスタマイズします。"
+                                               Margin="0,2,0,14" />
+
+                                    <!-- 既定テンプレート -->
+                                    <StackPanel Margin="0,0,0,4">
+                                        <Label Content="既定テンプレート (_P):"
+                                               Target="{Binding ElementName=TemplateBox}"
+                                               Padding="0"
+                                               FontWeight="Medium" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                   Text="利用可能な埋め込み変数: {app} (アプリ名), {title} (タイトル), {body} (本文), {time} (受信時刻)"
+                                                   Margin="0,2,0,8" />
+                                        <TextBox x:Name="TemplateBox"
+                                                 Text="{Binding ReadingTemplate, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- 最大文字数制限 -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="1通知あたりの最大文字数:"
+                                                   Target="{Binding ElementName=MaxCharsBox}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="長文の通知が届いた際に指定した文字数で発話を打ち切ります。" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBox x:Name="MaxCharsBox"
+                                                     Style="{StaticResource MonoTextBox}"
+                                                     Width="72"
+                                                     Text="{Binding MaxCharsPerNotification, UpdateSourceTrigger=PropertyChanged}"
+                                                     Margin="0,0,8,0" />
+                                            <TextBlock Text="文字" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                            <CheckBox Style="{StaticResource ToggleSwitch}"
+                                                      Tag="Compact"
+                                                      Content="超過時に「以下省略」を付与"
+                                                      IsChecked="{Binding AppendOmittedSuffix}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- URL 読み替え -->
+                                    <CheckBox Style="{StaticResource ToggleSwitch}"
+                                              IsChecked="{Binding SpeakUrlAsWord}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabelText}"
+                                                       Text="本文中の URL を「URL」と読み替える" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="長いリンク文字列をスキップし、連続する絵文字も自動除去して聴きやすくします。" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- =====================================================
+                     タブ 3: ミュート (SPEC §4.6-3)
+                     ===================================================== -->
+                <TabItem Header="ミュート (_3)"
+                         Style="{StaticResource NavigationTabItem}"
+                         Tag="&#xE74F;">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,4,24,16">
+                        <StackPanel>
+                            <!-- ページヘッダー -->
+                            <StackPanel Margin="0,0,0,16">
+                                <TextBlock Style="{StaticResource PageTitleText}" Text="ミュート・通知制御" />
+                                <TextBlock Style="{StaticResource PageSubtitleText}"
+                                           Text="手動ミュート、ホットキーによる即時切替、おやすみモード、および除外キーワードを設定します。" />
+                            </StackPanel>
+
+                            <!-- カード 1: 手動ミュートとグローバルホットキー -->
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleText}" Text="手動ミュートとグローバルホットキー" />
+                                    <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                               Text="作業中や通話中にすばやく音声を一時停止するためのショートカットを設定します。"
+                                               Margin="0,2,0,14" />
+
+                                    <!-- 手動ミュート切替 -->
+                                    <CheckBox Style="{StaticResource ToggleSwitch}"
+                                              IsChecked="{Binding IsManuallyMuted}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabelText}"
+                                                       Text="今すぐミュートを有効にする" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="有効にしている間は、すべての通知読み上げとキューへの登録を一時停止します。" />
+                                        </StackPanel>
+                                    </CheckBox>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- グローバルホットキー設定 -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <Label Content="ミュート切替グローバルホットキー (_H):"
+                                                   Target="{Binding ElementName=HotkeyBox}"
+                                                   Padding="0"
+                                                   FontWeight="Medium" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="{Binding HotkeyStatusText}"
+                                                       Foreground="{StaticResource AccentBrush}" />
+                                        </StackPanel>
+                                        <TextBox x:Name="HotkeyBox"
+                                                 Grid.Column="1"
+                                                 Style="{StaticResource MonoTextBox}"
+                                                 Width="180"
+                                                 Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}"
+                                                 ToolTip="例: Ctrl+Alt+M, Win+Alt+M など" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- カード 2: おやすみモード・フルスクリーン抑制 -->
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleText}" Text="おやすみ時間帯・フルスクリーン抑制" />
+                                    <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                               Text="就寝時やプレゼンテーション、ゲームプレイ中の通知読み上げを自動で抑制します。"
+                                               Margin="0,2,0,14" />
+
+                                    <!-- おやすみ時間帯 -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <CheckBox Style="{StaticResource ToggleSwitch}"
+                                                      Tag="Compact"
+                                                      IsChecked="{Binding QuietHoursEnabled}">
+                                                <TextBlock Style="{StaticResource SettingLabelText}"
+                                                           Text="おやすみ時間帯は自動でミュートする" />
+                                            </CheckBox>
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="指定した時間帯の間に届いた通知は自動的にスキップされます。"
+                                                       Margin="40,2,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Label Content="開始:" Target="{Binding ElementName=QuietStartBox}" Margin="0,0,4,0" />
+                                            <TextBox x:Name="QuietStartBox"
+                                                     Style="{StaticResource MonoTextBox}"
+                                                     Width="68"
+                                                     Text="{Binding QuietHoursStart, UpdateSourceTrigger=PropertyChanged}"
+                                                     Margin="0,0,8,0"
+                                                     ToolTip="形式: HH:mm (例 23:00)" />
+                                            <Label Content="〜 終了:" Target="{Binding ElementName=QuietEndBox}" Margin="0,0,4,0" />
+                                            <TextBox x:Name="QuietEndBox"
+                                                     Style="{StaticResource MonoTextBox}"
+                                                     Width="68"
+                                                     Text="{Binding QuietHoursEnd, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="形式: HH:mm (例 07:00)" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowDivider}" />
+
+                                    <!-- フルスクリーンアプリ自動ミュート -->
+                                    <CheckBox Style="{StaticResource ToggleSwitch}"
+                                              IsChecked="{Binding MuteWhenFullscreen}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabelText}"
+                                                       Text="フルスクリーンアプリ（ゲーム・全画面動画・プレゼン）実行中はミュートする" />
+                                            <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                       Text="全画面ウィンドウがアクティブな間は通知読み上げを一時的に保留・抑制します。" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- カード 3: 全体ミュートキーワード -->
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleText}" Text="全体ミュートキーワード" />
+                                    <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                               Text="タイトルまたは本文に以下の語句を含む通知は読み上げません（1行に1語句、大文字小文字は区別されません）。"
+                                               Margin="0,2,0,10" />
+                                    <TextBox Style="{StaticResource MultilineTextBox}"
+                                             Height="140"
+                                             Text="{Binding GlobalKeywordsText, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- =====================================================
+                     タブ 4: 全般・履歴 (SPEC §4.6-4, §4.7 F27)
+                     ===================================================== -->
+                <TabItem Header="全般・履歴 (_4)"
+                         Style="{StaticResource NavigationTabItem}"
+                         Tag="&#xE713;">
+                    <Grid Margin="12,4,24,16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" /> <!-- ページヘッダー -->
+                            <RowDefinition Height="Auto" /> <!-- スタートアップ＆エンジンカード -->
+                            <RowDefinition Height="Auto" /> <!-- 履歴ヘッダー -->
+                            <RowDefinition Height="*" />    <!-- 履歴テーブル (DataGrid) -->
+                        </Grid.RowDefinitions>
+
+                        <!-- ページヘッダー -->
+                        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                            <TextBlock Style="{StaticResource PageTitleText}" Text="全般設定・通知履歴" />
+                            <TextBlock Style="{StaticResource PageSubtitleText}"
+                                       Text="Windows サインイン時の自動起動、VOICEVOX エンジン連携、および直近の通知受信ログを確認します。" />
+                        </StackPanel>
+
+                        <!-- スタートアップとエンジン連携カード -->
+                        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleText}" Text="スタートアップと VOICEVOX エンジン連携" />
+                                <TextBlock Style="{StaticResource SectionDescriptionText}"
+                                           Text="Windows 起動時の自動実行や、VOICEVOX エンジンの自動起動・通信先を指定します。"
+                                           Margin="0,2,0,14" />
+
+                                <!-- Windows スタートアップ -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock Style="{StaticResource SettingLabelText}"
+                                                   Text="Windows サインイン時に NotifyVox を自動起動する" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                   Text="{Binding StartupStatusMessage}" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1"
+                                              Style="{StaticResource ToggleSwitch}"
+                                              Tag="Compact"
+                                              IsChecked="{Binding LaunchOnWindowsStartup}"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Border Style="{StaticResource RowDivider}" />
+
+                                <!-- アクションセンター未読通知読み上げ -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock Style="{StaticResource SettingLabelText}"
+                                                   Text="起動時にアクションセンターの未読通知を読む" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                   Text="アプリ起動時に Windows の未読通知を遡って読み上げます。" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <CheckBox Style="{StaticResource ToggleSwitch}"
+                                                  Tag="Compact"
+                                                  IsChecked="{Binding ReadUnreadOnStartup}"
+                                                  Margin="0,0,12,0" />
+                                        <TextBlock Text="最大" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <TextBox Style="{StaticResource MonoTextBox}"
+                                                 Width="48"
+                                                 Text="{Binding MaxUnreadOnStartup, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,0,6,0" />
+                                        <TextBlock Text="件" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Border Style="{StaticResource RowDivider}" />
+
+                                <!-- VOICEVOX エンドポイント -->
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="180" />
-                                        <ColumnDefinition Width="200" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="ミュート切替ホットキー (_H):" Target="{Binding ElementName=HotkeyBox}" />
-                                    <TextBox x:Name="HotkeyBox"
-                                             Grid.Column="1"
-                                             Text="{Binding HotkeyText, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center"
-                                             Margin="0,0,10,0" />
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding HotkeyStatusText}"
-                                               Foreground="#475569"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource CardBorder}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="おやすみモード・フルスクリーン制御" />
-
-                                <WrapPanel Margin="0,0,0,10" VerticalAlignment="Center">
-                                    <CheckBox Content="おやすみ時間帯は自動でミュートする"
-                                              IsChecked="{Binding QuietHoursEnabled}"
-                                              VerticalAlignment="Center"
-                                              Margin="0,0,16,0" />
-                                    <Label Content="開始 (HH:mm):" Target="{Binding ElementName=QuietStartBox}" />
-                                    <TextBox x:Name="QuietStartBox" Width="68"
-                                             Text="{Binding QuietHoursStart, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center" Margin="4,0,12,0" />
-                                    <Label Content="終了 (HH:mm):" Target="{Binding ElementName=QuietEndBox}" />
-                                    <TextBox x:Name="QuietEndBox" Width="68"
-                                             Text="{Binding QuietHoursEnd, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center" Margin="4,0,0,0" />
-                                </WrapPanel>
-
-                                <CheckBox Content="フルスクリーンアプリ（ゲーム・全画面動画）実行中はミュートする（既定: OFF）"
-                                          IsChecked="{Binding MuteWhenFullscreen}" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource CardBorder}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="全体ミュートキーワード（1行に1キーワード）" />
-                                <TextBlock Text="タイトルまたは本文に以下の語句を含む通知は読み上げません（大文字小文字を区別しません）。"
-                                           Foreground="#64748B" FontSize="12" Margin="0,0,0,6" />
-                                <TextBox Text="{Binding GlobalKeywordsText, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True"
-                                         Height="140"
-                                         VerticalScrollBarVisibility="Auto"
-                                         Padding="6" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ==========================================
-                 タブ 4: 全般・履歴 (SPEC §4.6-4, §4.7 F27)
-                 ========================================== -->
-            <TabItem Header="4. 全般・履歴 (_4)">
-                <DockPanel Margin="10">
-                    <StackPanel DockPanel.Dock="Top">
-                        <Border Style="{StaticResource CardBorder}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="スタートアップと VOICEVOX エンジン連携" />
-
-                                <WrapPanel Margin="0,0,0,8" VerticalAlignment="Center">
-                                    <CheckBox Content="Windows サインイン時に NotifyVox を自動起動する"
-                                              IsChecked="{Binding LaunchOnWindowsStartup}"
-                                              VerticalAlignment="Center"
-                                              Margin="0,0,12,0" />
-                                    <TextBlock Text="{Binding StartupStatusMessage}" Foreground="#64748B" FontSize="12" VerticalAlignment="Center" />
-                                </WrapPanel>
-
-                                <WrapPanel Margin="0,0,0,10" VerticalAlignment="Center">
-                                    <CheckBox Content="起動時にアクションセンターの未読通知を読む（最大件数:"
-                                              IsChecked="{Binding ReadUnreadOnStartup}"
-                                              VerticalAlignment="Center" />
-                                    <TextBox Width="48"
-                                             Text="{Binding MaxUnreadOnStartup, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center"
-                                             Margin="6,0,6,0" />
-                                    <TextBlock Text="件）" VerticalAlignment="Center" />
-                                </WrapPanel>
-
-                                <Grid Margin="0,0,0,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="170" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="VOICEVOX エンドポイント:" Target="{Binding ElementName=EndpointBox}" />
-                                    <TextBox x:Name="EndpointBox" Grid.Column="1"
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Label Content="VOICEVOX エンドポイント:"
+                                               Target="{Binding ElementName=EndpointBox}"
+                                               Padding="0"
+                                               FontWeight="Medium" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                   Text="既定: http://127.0.0.1:50021" />
+                                    </StackPanel>
+                                    <TextBox x:Name="EndpointBox"
+                                             Grid.Column="1"
+                                             Style="{StaticResource MonoTextBox}"
                                              Text="{Binding VoicevoxEndpoint, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center" Margin="0,0,8,0" />
-                                    <Button Grid.Column="2" Content="公式サイトを開く" Command="{Binding OpenVoicevoxWebsiteCommand}" Margin="0" />
+                                             Margin="0,0,8,0" />
+                                    <Button Grid.Column="2"
+                                            Content="公式サイトを開く"
+                                            Style="{StaticResource SubtleButton}"
+                                            Command="{Binding OpenVoicevoxWebsiteCommand}" />
                                 </Grid>
 
-                                <!-- SPEC §8: localhost 以外のエンドポイント警告 -->
+                                <!-- localhost 以外のセキュリティ警告 (SPEC §8) -->
                                 <TextBlock Visibility="{Binding IsNonLoopbackEndpointWarningVisible, Converter={StaticResource BoolToVis}}"
                                            Text="⚠️ 警告: localhost 以外のアドレスが指定されています。通知内容がネットワーク経由で外部へ送信される恐れがあります。"
-                                           Foreground="#DC2626"
+                                           Foreground="{StaticResource DangerBrush}"
                                            FontWeight="SemiBold"
                                            TextWrapping="Wrap"
-                                           Margin="0,0,0,8" />
+                                           Margin="0,8,0,0" />
 
-                                <Grid Margin="0,0,0,6">
+                                <Border Style="{StaticResource RowDivider}" />
+
+                                <!-- エンジン実行ファイルパス -->
+                                <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="180" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Label Grid.Column="0" Content="エンジン実行ファイルパス:" Target="{Binding ElementName=EnginePathBox}" />
-                                    <TextBox x:Name="EnginePathBox" Grid.Column="1"
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Label Content="エンジン実行ファイルパス:"
+                                               Target="{Binding ElementName=EnginePathBox}"
+                                               Padding="0"
+                                               FontWeight="Medium" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionText}"
+                                                   Text="run.exe または voicevox.exe" />
+                                    </StackPanel>
+                                    <TextBox x:Name="EnginePathBox"
+                                             Grid.Column="1"
+                                             Style="{StaticResource MonoTextBox}"
                                              Text="{Binding EngineExePath, UpdateSourceTrigger=PropertyChanged}"
-                                             VerticalContentAlignment="Center" Margin="0,0,8,0" />
-                                    <Button Grid.Column="2" Content="参照..." Command="{Binding BrowseEngineExeCommand}" Margin="0" />
+                                             Margin="0,0,8,0" />
+                                    <Button Grid.Column="2"
+                                            Content="参照..."
+                                            Command="{Binding BrowseEngineExeCommand}" />
                                 </Grid>
 
+                                <Border Style="{StaticResource RowDivider}" />
+
+                                <!-- 自動起動チェック ＆ フォルダアクセスボタン -->
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                        <Button Content="ログフォルダを開く" Command="{Binding OpenLogsDirectoryCommand}" />
-                                        <Button Content="設定フォルダを開く" Command="{Binding OpenSettingsDirectoryCommand}" Margin="0" />
+                                        <Button Content="ログフォルダを開く"
+                                                Style="{StaticResource SubtleButton}"
+                                                Command="{Binding OpenLogsDirectoryCommand}"
+                                                Margin="0,0,8,0" />
+                                        <Button Content="設定フォルダを開く"
+                                                Style="{StaticResource SubtleButton}"
+                                                Command="{Binding OpenSettingsDirectoryCommand}" />
                                     </StackPanel>
-                                    <CheckBox Content="起動時に VOICEVOX 未接続なら上記パスから自動起動を試みる"
+                                    <CheckBox Style="{StaticResource ToggleSwitch}"
+                                              Tag="Compact"
                                               IsChecked="{Binding AutoStartEngine}"
-                                              VerticalAlignment="Center" />
+                                              VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingLabelText}"
+                                                   Text="NotifyVox 起動時に VOICEVOX 未接続なら上記パスから自動起動を試みる" />
+                                    </CheckBox>
                                 </DockPanel>
                             </StackPanel>
                         </Border>
 
-                        <!-- 履歴ヘッダ -->
-                        <DockPanel Margin="0,0,0,6">
-                            <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
-                                <Label Content="保持日数:" Target="{Binding ElementName=RetentionBox}" />
-                                <TextBox x:Name="RetentionBox" Width="48"
+                        <!-- 履歴ヘッダー: タイトル + 保持日数 + クリアボタン -->
+                        <DockPanel Grid.Row="2" Margin="0,0,0,8">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Label Content="保持日数:"
+                                       Target="{Binding ElementName=RetentionBox}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,4,0" />
+                                <TextBox x:Name="RetentionBox"
+                                         Style="{StaticResource MonoTextBox}"
+                                         Width="48"
                                          Text="{Binding HistoryRetentionDays, UpdateSourceTrigger=PropertyChanged}"
-                                         VerticalContentAlignment="Center" Margin="4,0,6,0" />
-                                <TextBlock Text="日" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                <Button Content="履歴をクリア" Command="{Binding ClearHistoryCommand}" Margin="0" />
-                            </WrapPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="直近の通知・読み上げ履歴 (最大200件表示)" VerticalAlignment="Center" Margin="0" />
+                                         Margin="0,0,6,0" />
+                                <TextBlock Text="日" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                <Button Content="履歴をクリア"
+                                        Style="{StaticResource DangerSubtleButton}"
+                                        Command="{Binding ClearHistoryCommand}" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleText}"
+                                       Text="直近の通知・読み上げ履歴 (最大200件)"
+                                       VerticalAlignment="Center" />
                         </DockPanel>
-                    </StackPanel>
 
-                    <!-- 履歴テーブル -->
-                    <DataGrid ItemsSource="{Binding RecentHistory}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              CanUserAddRows="False"
-                              CanUserDeleteRows="False"
-                              HeadersVisibility="Column"
-                              GridLinesVisibility="Horizontal"
-                              HorizontalGridLinesBrush="#E2E8F0"
-                              RowBackground="White"
-                              AlternatingRowBackground="#F8FAFC"
-                              BorderBrush="#CBD5E1"
-                              BorderThickness="1">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="日時" Binding="{Binding TimeDisplay}" Width="115" />
-                            <DataGridTextColumn Header="アプリ" Binding="{Binding AppName}" Width="130" />
-                            <DataGridTextColumn Header="タイトル" Binding="{Binding Title}" Width="150" />
-                            <DataGridTextColumn Header="本文" Binding="{Binding Body}" Width="*" />
-                            <DataGridTextColumn Header="状態" Binding="{Binding StatusDisplay}" Width="165" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </TabItem>
+                        <!-- 履歴テーブル (DataGrid) -->
+                        <Border Grid.Row="3"
+                                Background="{StaticResource SurfaceBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource ControlCornerRadius}">
+                            <DataGrid ItemsSource="{Binding RecentHistory}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal"
+                                      HorizontalGridLinesBrush="{StaticResource DividerBrush}"
+                                      ColumnHeaderStyle="{StaticResource HistoryHeaderStyle}"
+                                      CellStyle="{StaticResource HistoryCellStyle}"
+                                      RowStyle="{StaticResource HistoryRowStyle}"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      MinHeight="180">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="日時" Binding="{Binding TimeDisplay}" Width="120" />
+                                    <DataGridTextColumn Header="アプリ" Binding="{Binding AppName}" Width="140" />
+                                    <DataGridTextColumn Header="タイトル" Binding="{Binding Title}" Width="160" />
+                                    <DataGridTextColumn Header="本文" Binding="{Binding Body}" Width="*" />
+                                    <DataGridTextColumn Header="状態" Binding="{Binding StatusDisplay}" Width="170" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+                    </Grid>
+                </TabItem>
 
-        </TabControl>
-
-        <TextBlock Grid.Row="2"
-                   Text="ヒント: このウィンドウを閉じても NotifyVox はタスクトレイに常駐し続けます。終了するにはトレイアイコンを右クリックして「終了」を選択してください。"
-                   Foreground="#64748B"
-                   FontSize="11.5"
-                   Margin="2,8,2,0" />
-    </Grid>
+            </TabControl>
+        </Grid>
+    </Border>
 </Window>

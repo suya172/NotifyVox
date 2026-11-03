@@ -489,3 +489,9 @@ $RECYCLE.BIN/
 
 # NotifyVox local runtime artifacts
 *.jsonl
+
+# Local code-signing certificates & release output
+*.cer
+*.pfx.base64*
+.certs/
+dist/

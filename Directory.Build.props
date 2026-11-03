@@ -6,8 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <Authors>suya_172</Authors>
+    <Version>0.1.0</Version>
+    <Authors>suya172</Authors>
+    <Company>suya172</Company>
     <Product>NotifyVox</Product>
+    <Copyright>Copyright (c) 2026 suya172</Copyright>
+    <RepositoryUrl>https://github.com/suya172/NotifyVox</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <!-- WinRT (Windows SDK projection) を使うプロジェクト共通の TFM 定義。

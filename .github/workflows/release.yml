@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'ビルドするバージョン (例: 0.1.0 / 空欄で Directory.Build.props の値を使用)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Sign MSIX Release (win-x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Run unit tests
+        shell: pwsh
+        run: dotnet test NotifyVox.slnx -c Release --nologo
+
+      - name: Build & Sign MSIX Release ZIP
+        shell: pwsh
+        env:
+          MSIX_SIGNING_CERT_BASE64: ${{ secrets.MSIX_SIGNING_CERT_BASE64 }}
+          MSIX_SIGNING_CERT_PASSWORD: ${{ secrets.MSIX_SIGNING_CERT_PASSWORD }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $ver = ''
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+              $ver = $env:GITHUB_REF_NAME
+          } elseif (-not [string]::IsNullOrWhiteSpace($env:INPUT_VERSION)) {
+              $ver = $env:INPUT_VERSION
+          }
+
+          $pfxFile = Join-Path $env:RUNNER_TEMP 'NotifyVoxSigning.pfx'
+          try {
+              if (-not [string]::IsNullOrWhiteSpace($env:MSIX_SIGNING_CERT_BASE64)) {
+                  $bytes = [Convert]::FromBase64String($env:MSIX_SIGNING_CERT_BASE64.Trim())
+                  [System.IO.File]::WriteAllBytes($pfxFile, $bytes)
+                  ./scripts/package-msix.ps1 `
+                      -Version $ver `
+                      -PfxPath $pfxFile `
+                      -PfxPassword $env:MSIX_SIGNING_CERT_PASSWORD `
+                      -OutputDir 'artifacts/release'
+              } else {
+                  Write-Host '::warning::MSIX_SIGNING_CERT_BASE64 Secret が未設定のため一時自己署名証明書で署名します。継続アップデートで同一証明書を維持するには scripts/new-signing-cert.ps1 で生成した値を GitHub Secrets に登録してください。'
+                  ./scripts/package-msix.ps1 `
+                      -Version $ver `
+                      -OutputDir 'artifacts/release'
+              }
+          }
+          finally {
+              if (Test-Path -LiteralPath $pfxFile) {
+                  Remove-Item -LiteralPath $pfxFile -Force
+              }
+          }
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NotifyVox-win-x64
+          path: |
+            artifacts/release/*.zip
+            artifacts/release/*.sha256
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body: |
+            ## インストール手順 (Windows 10 1903+ / Windows 11 x64)
+
+            1. [VOICEVOX (0.26.0 以降)](https://voicevox.hiroshiba.jp/) をインストール・起動しておきます（.NET ランタイムの別途インストールは不要です）。
+            2. 下記 Assets から `NotifyVox-*-win-x64.zip` をダウンロードし、**すべて展開（解凍）** します。
+            3. 展開フォルダ内の **`Install.cmd`** をダブルクリックして実行します（初回のみ署名証明書の登録のため管理者権限の確認が表示されます）。
+            4. アンインストールする場合は同梱の `Uninstall.cmd` を実行すると、アプリ本体と自己署名証明書の両方を綺麗に削除できます。
+          files: |
+            artifacts/release/*.zip
+            artifacts/release/*.sha256
