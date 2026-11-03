@@ -1,4 +1,4 @@
-﻿#Requires -Version 7
+#Requires -Version 7
 <#
 .SYNOPSIS
   NotifyVox をビルドし、ビルド出力フォルダを MSIX loose layout として登録する (開発用)。
@@ -27,12 +27,16 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $packageName = 'NotifyVox.Dev'
 
-function Remove-DevPackage {
+function Remove-DevPackage([switch] $PreserveData) {
     $existing = Get-AppxPackage -Name $packageName
     if ($existing) {
         Write-Host "既存の登録を解除: $($existing.PackageFullName)"
         Get-Process -Name NotifyVox -ErrorAction SilentlyContinue | Stop-Process -Force
-        Remove-AppxPackage -Package $existing.PackageFullName
+        if ($PreserveData) {
+            Remove-AppxPackage -Package $existing.PackageFullName -PreserveApplicationData
+        } else {
+            Remove-AppxPackage -Package $existing.PackageFullName
+        }
     }
 }
 
@@ -41,8 +45,12 @@ if ($devMode -ne 1) {
     throw '開発者モードが無効です。設定 > システム > 開発者向け で有効化してください。'
 }
 
-Remove-DevPackage
-if ($Unregister) { return }
+if ($Unregister) {
+    Remove-DevPackage
+    return
+}
+
+Remove-DevPackage -PreserveData
 
 $proj = Join-Path $root 'src/NotifyVox.App/NotifyVox.App.csproj'
 dotnet build $proj -c $Configuration --nologo

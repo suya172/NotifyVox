@@ -144,6 +144,13 @@ powershell.exe -NoProfile -File scripts/send-test-toast.ps1 -Title "NotifyVox �
 | ログ | `Serilog` | 10.0.0 / 7.0.0 | ローテーション付き（5MB × 3 世代、本文マスク） |
 | テスト | `xunit.v3` + `MTP` + `NSubstitute` | 4.0.2 / 6.2.0 | .NET 10 次世代テスト基盤 |
 
+### 永続化ファイルと設計選択 (SPEC §6.4 / §13.5)
+
+- **設定ファイル**: `%APPDATA%\NotifyVox\settings.json`（MSIX パッケージ実行時はパッケージ仮想化配下または実パスに保存。設定画面の「設定フォルダを開く」から直接開けます）
+- **読み上げ履歴**: `%LOCALAPPDATA%\NotifyVox\history.jsonl`（**JSON Lines 形式**を採用）
+  - **採用理由**: SQLite ネイティブバイナリの追加同梱が不要で MSIX パッケージを軽量・シンプルに保てること、1行1レコードの追記専用構造のため異常終了時でもファイル全体が破損しにくいこと、および既定7日間保持規模の履歴件数であれば起動時読み込みや期限切れ削除も数ミリ秒で完結するため。
+- **ログファイル**: `%LOCALAPPDATA%\NotifyVox\logs\notifyvox-.log`（最大 5MB × 3世代ローテーション。プライバシー保護のため通知本文および `audio_query` のクエリ文字列はログへ出力しません）
+
 ---
 
 ## ライセンス

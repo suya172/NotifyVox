@@ -330,10 +330,13 @@ record SpeechRequest(
 
 ---
 
-## 13. 前提・未決事項（実装前に確認すること）
+## 13. 前提・未決事項と確定結果
 
-1. **ストリーミング合成 API の正確なエンドポイント仕様**は、VOICEVOX エンジン 0.26.0 の OpenAPI 定義（エンジン起動時の `/docs` / `openapi.json`）で確認してから実装すること。本書ではパスを断定しない。
-2. ストリーミング対応は話者スタイル種別 `streaming_talk` に紐づく可能性がある。対象話者が非対応の場合のフォールバック（F22-4）を必ず実装すること。
-3. アプリ名称・アイコンは未定（仮称 NotifyVox）。
-4. MSIX の署名方法（自己署名で配布するか、個人利用に留めるか）はフェーズ 3 までに決める。
-5. 読み上げ履歴の保存形式（SQLite / JSON Lines）はフェーズ 1 開始時に決定し、本書に追記すること。
+1. **ストリーミング合成 API の正確なエンドポイント仕様**（確認済み）:
+   - VOICEVOX エンジン 0.26.0 の `openapi.json` にて `POST /streaming_synthesis`（クエリ: `speaker`, `start_offset=0`, `segment_length=0.3`, `enable_interrogative_upspeak=true`, `core_version`、ボディ: `AudioQuery` JSON、レスポンス: 先頭 44 バイト WAV ヘッダ＋16bit PCM チャンク列）であることを確認済み。
+2. **ストリーミング対応スタイル種別とフォールバック**（確認済み）:
+   - `GET /speakers` の各スタイルの `type` が `"streaming_talk"` の場合に `/streaming_synthesis` を使用し、それ以外または非対応応答時は `POST /synthesis`（全文一括）にフォールバックする（F22-4）。
+3. **アプリ名称・アイコン**: 仮称 `NotifyVox` を継続使用。
+4. **MSIX の署名方法**: 開発時は loose layout（`scripts/register-dev.ps1`）を使用し、配布用自己署名はフェーズ 3 で整備する。
+5. **読み上げ履歴の保存形式**（決定済み）:
+   - **JSON Lines 形式（`%LOCALAPPDATA%\NotifyVox\history.jsonl`）** を採用する。理由: 追加のネイティブ SQLite バイナリ依存を持たずに MSIX パッケージを軽量に保て、1 行 1 レコードの追記方式により異常終了時も破損しにくく、7 日間保持規模の件数であれば起動時・定期クリーンアップも数ミリ秒で完結するため。

@@ -1,0 +1,13 @@
+root = true
+
+[*.cs]
+# SPEC §6.1 でクラス名 SpeechQueue が指定されているためサフィックス規則を緩和
+dotnet_diagnostic.CA1711.severity = none
+
+# デスクトップ常駐アプリ（低頻度の通知イベント）では標準 ILogger 拡張メソッドの可読性を優先
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+
+# テストメソッドのアンダースコア区切り命名 (Method_Condition_Expected) を許可
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none

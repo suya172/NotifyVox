@@ -12,6 +12,7 @@
     <TargetFramework>$(NotifyVoxWindowsTfm)</TargetFramework>
     <SupportedOSPlatformVersion>$(NotifyVoxMinWindows)</SupportedOSPlatformVersion>
     <RootNamespace>NotifyVox.Windows</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

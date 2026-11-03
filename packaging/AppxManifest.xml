@@ -14,8 +14,9 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 desktop rescap">
+  IgnorableNamespaces="uap uap3 desktop desktop4 rescap">
 
   <Identity
     Name="NotifyVox.Dev"
@@ -39,7 +40,8 @@
   </Resources>
 
   <Applications>
-    <Application Id="NotifyVox" Executable="NotifyVox.exe" EntryPoint="Windows.FullTrustApplication">
+    <!-- SupportsMultipleInstances=true により、常駐中にスタートメニューから再起動された際に既存インスタンスの設定画面を前面表示できる -->
+    <Application Id="NotifyVox" Executable="NotifyVox.exe" EntryPoint="Windows.FullTrustApplication" desktop4:SupportsMultipleInstances="true">
       <uap:VisualElements
         DisplayName="NotifyVox"
         Description="Windows 通知を VOICEVOX で読み上げる常駐アプリ"
