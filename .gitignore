@@ -480,3 +480,12 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+
+# Modern Windows App Packaging (.msix extras)
+*.msixbundle
+*.msixupload
+*.msixsym
+
+# NotifyVox local runtime artifacts
+*.jsonl

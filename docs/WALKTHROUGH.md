@@ -17,7 +17,7 @@
 
 ## 1. 全体の進捗と達成状況
 
-[SPEC.md §10](file:///c:/Users/asahi/repos/NotifyVox/SPEC.md#L305-L313) のマイルストーン（フェーズ 0〜3 の主要機能）の実装と実機疎通検証を完了しました。
+[SPEC.md §10](../SPEC.md#10-開発フェーズマイルストーン) のマイルストーン（フェーズ 0〜3 の主要機能）の実装と実機疎通検証を完了しました。
 
 ```mermaid
 flowchart TD
@@ -43,26 +43,26 @@ flowchart TD
   - `NotifyVox.App` (`net10.0-windows10.0.19041.0`, WPF): `H.NotifyIcon.Wpf` トレイ常駐、`CommunityToolkit.Mvvm` 設定画面、Serilog、`Microsoft.Extensions.Hosting`。
   - `NotifyVox.Core.Tests` (`net10.0`): xUnit v3 + Microsoft.Testing.Platform + NSubstitute + `FakeTimeProvider`。
 - **MSIX loose-layout 開発ループ**:
-  - [packaging/AppxManifest.xml](file:///c:/Users/asahi/repos/NotifyVox/packaging/AppxManifest.xml) と [scripts/register-dev.ps1](file:///c:/Users/asahi/repos/NotifyVox/scripts/register-dev.ps1)（`-PreserveApplicationData` 対応）により、設定データを保持したまま高速にパッケージ再登録・実機確認が可能。
+  - [packaging/AppxManifest.xml](../packaging/AppxManifest.xml) と [scripts/register-dev.ps1](../scripts/register-dev.ps1)（`-PreserveApplicationData` 対応）により、設定データを保持したまま高速にパッケージ再登録・実機確認が可能。
 
 ---
 
 ## 3. フェーズ 1: コアパイプラインとストリーミング読み上げ実装
 
-- **[`TextFormatter`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Core/Formatting/TextFormatter.cs)**:
+- **[`TextFormatter`](../src/NotifyVox.Core/Formatting/TextFormatter.cs)**:
   - `{app}`, `{title}`, `{body}`, `{time}`（および日本語プレースホルダ）展開。
   - 空タイトル省略、タイトル＝本文時の重複省略、両方空時のスキップ。
   - URL の `URL` 読み替え、グラフェムクラスタ単位での連続絵文字除去（単一絵文字や `@` メンションは保持）、文字数上限切り詰め＋「以下省略」付与。
   - 疑問符 `？` 等を文末に維持した文分割（VOICEVOX の `enable_interrogative_upspeak` を活用）。
-- **[`FilterPolicy`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Core/Filtering/FilterPolicy.cs)**:
+- **[`FilterPolicy`](../src/NotifyVox.Core/Filtering/FilterPolicy.cs)**:
   - アプリ許可リスト（既定 OFF）、全体＋アプリ別の 2 階層キーワードミュート。
   - 10 秒以内の同一通知重複排除（F9）。
   - 30 秒以内に同一アプリから 4 件以上着信した際の「○○から N 件の通知です」要約発話と 60 秒間の連投抑制モード（F10）。
   - 手動ミュート、日跨ぎ対応のおやすみ時間帯（F11）、フルスクリーン実行中ミュート（F12）。
-- **[`SpeechQueue`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Core/Queueing/SpeechQueue.cs) & [`NotificationPipeline`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Core/Pipeline/NotificationPipeline.cs)**:
+- **[`SpeechQueue`](../src/NotifyVox.Core/Queueing/SpeechQueue.cs) & [`NotificationPipeline`](../src/NotifyVox.Core/Pipeline/NotificationPipeline.cs)**:
   - FIFO 順次再生、高優先度通知のチャンク境界割込み（F14）、上限 10 件超過時の最古通常通知破棄（F15）。
   - 現在の文を `WasapiAudioPlayer` で再生しながら、次の文の `audio_query` + `streaming_synthesis` を `BoundedChannel` へ先行フェッチする文間ゼロギャップ・パイプライン（F22-3）。
-- **[`VoicevoxClient`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Core/Voicevox/VoicevoxClient.cs) & [`WasapiAudioPlayer`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Windows/Audio/WasapiAudioPlayer.cs)**:
+- **[`VoicevoxClient`](../src/NotifyVox.Core/Voicevox/VoicevoxClient.cs) & [`WasapiAudioPlayer`](../src/NotifyVox.Windows/Audio/WasapiAudioPlayer.cs)**:
   - `POST /streaming_synthesis`（非対応話者・エンジンでは `POST /synthesis` へ自動フォールバック）、1 文 10 秒タイムアウト、連続 5 回失敗時の既定話者フォールバック。
   - NAudio 3.3.0 `WasapiPlayerBuilder` (`BuildAsync`) + `BufferedWaveProvider` により、1 チャンク目到着と同時に再生開始。ブロック境界アライメントと 16bit PCM サンプル単位の音量スケーリングによりノイズのない再生を実現。
 
@@ -70,7 +70,7 @@ flowchart TD
 
 ## 4. フェーズ 2: 4タブ設定 UI と再起動不要の即時反映
 
-- **[`MainWindow.xaml`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.App/MainWindow.xaml) / [`MainViewModel`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.App/ViewModels/MainViewModel.cs)**:
+- **[`MainWindow.xaml`](../src/NotifyVox.App/MainWindow.xaml) / [`MainViewModel`](../src/NotifyVox.App/ViewModels/MainViewModel.cs)**:
   1. **アプリ一覧タブ**: アクションセンター既存通知および新規受信通知からアプリを自動候補収集。ON/OFF、個別話者、優先度、個別テンプレート、個別ミュートワードを設定可能。未許可時は Windows 通知設定への誘導バナーを表示。
   2. **読み上げタブ**: VOICEVOX 接続ステータス、話者・スタイル選択、話速・音高・抑揚・音量スライダー、WASAPI 出力デバイス選択、テンプレート・文字数上限・URL 読み替え設定。
   3. **ミュートタブ**: 手動ミュート、グローバルホットキー（`Ctrl+Alt+M` 既定）、おやすみ時間帯、フルスクリーン中ミュート、全体ミュートキーワード。
@@ -81,9 +81,9 @@ flowchart TD
 
 ## 5. フェーズ 3: 履歴・ホットキー・自動起動・プライバシー保護ログ
 
-- **[`JsonLinesHistoryStore`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Core/History/JsonLinesHistoryStore.cs)**: `history.jsonl` への追記保存と保持日数（既定 7 日）に基づく自動クリーンアップ。
-- **[`GlobalHotkeyManager`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Windows/Interop/GlobalHotkeyManager.cs)**: `HWND_MESSAGE` メッセージ専用ウィンドウを用いた Win32 `RegisterHotKey` 常駐待ち受け。
-- **[`StartupTaskService`](file:///c:/Users/asahi/repos/NotifyVox/src/NotifyVox.Windows/Startup/StartupTaskService.cs)**: MSIX `StartupTask` (`NotifyVoxStartup`) 連携。自動起動時はウィンドウを出さずにトレイへ静かに常駐。
+- **[`JsonLinesHistoryStore`](../src/NotifyVox.Core/History/JsonLinesHistoryStore.cs)**: `history.jsonl` への追記保存と保持日数（既定 7 日）に基づく自動クリーンアップ。
+- **[`GlobalHotkeyManager`](../src/NotifyVox.Windows/Interop/GlobalHotkeyManager.cs)**: `HWND_MESSAGE` メッセージ専用ウィンドウを用いた Win32 `RegisterHotKey` 常駐待ち受け。
+- **[`StartupTaskService`](../src/NotifyVox.Windows/Startup/StartupTaskService.cs)**: MSIX `StartupTask` (`NotifyVoxStartup`) 連携。自動起動時はウィンドウを出さずにトレイへ静かに常駐。
 - **プライバシー保護ログ**: Serilog `5MB × 3` 世代ローテーションに加え、`HttpClient` の URL クエリログを抑制し、通知本文がログファイルへ一切記録されないことを実機検証で確認済み（SPEC §5, §8）。
 
 ---

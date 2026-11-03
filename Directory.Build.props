@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <Authors>asahi</Authors>
+    <Authors>suya_172</Authors>
     <Product>NotifyVox</Product>
   </PropertyGroup>
 

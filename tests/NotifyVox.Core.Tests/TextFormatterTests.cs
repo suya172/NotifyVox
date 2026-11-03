@@ -69,11 +69,11 @@ public sealed class TextFormatterTests
             "Discord",
             "Discord",
             "Bob",
-            "@asahi 資料はこちら https://example.com/docs/spec?id=123&lang=ja を確認してください",
+            "@alice 資料はこちら https://example.com/docs/spec?id=123&lang=ja を確認してください",
             FixedTime);
 
         var resultOn = TextFormatter.Format(ev, new ReadingSettings { SpeakUrlAsWord = true });
-        Assert.Equal("Discord。Bob。@asahi 資料はこちら URL を確認してください", resultOn);
+        Assert.Equal("Discord。Bob。@alice 資料はこちら URL を確認してください", resultOn);
 
         var resultOff = TextFormatter.Format(ev, new ReadingSettings { SpeakUrlAsWord = false });
         Assert.Contains("https://example.com/docs/spec?id=123&lang=ja", resultOff, StringComparison.Ordinal);

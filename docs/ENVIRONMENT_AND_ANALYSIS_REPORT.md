@@ -1,6 +1,6 @@
 # NotifyVox 環境構築・ライブラリ導入・技術分析レポート
 
-本ドキュメントは、設計書（[SPEC.md](file:///c:/Users/asahi/repos/NotifyVox/SPEC.md)）に基づき実施した **開発環境構築**、**ライブラリ選定・導入**、および **主要 API の詳細分析・実機検証結果** をまとめた技術レポートです。
+本ドキュメントは、設計書（[SPEC.md](../SPEC.md)）に基づき実施した **開発環境構築**、**ライブラリ選定・導入**、および **主要 API の詳細分析・実機検証結果** をまとめた技術レポートです。
 
 ---
 
@@ -48,7 +48,7 @@ NotifyVox/
 
 ## 2. ライブラリ選定と導入状況
 
-[Directory.Packages.props](file:///c:/Users/asahi/repos/NotifyVox/Directory.Packages.props) により、最新の安定版パッケージを一元管理しています。
+[Directory.Packages.props](../Directory.Packages.props) により、最新の安定版パッケージを一元管理しています。
 
 | パッケージ | 導入バージョン | 用途・採用理由 |
 |---|---|---|
